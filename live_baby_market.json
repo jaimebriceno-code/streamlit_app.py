@@ -1,0 +1,117 @@
+import json
+import os
+from datetime import datetime
+
+class LiveBabyMarket:
+    def __init__(self, filename="live_baby_market.json"):
+        self.filename = filename
+        
+        self.market_pool = {'Girl': 100.0, 'Boy': 100.0}
+        self.positions = {}
+        # New feature: A running log of every individual bet
+        self.bet_history = [] 
+        
+        self.load_state()
+
+    def save_state(self):
+        data = {
+            "market_pool": self.market_pool,
+            "positions": self.positions,
+            "bet_history": self.bet_history
+        }
+        with open(self.filename, 'w') as f:
+            json.dump(data, f, indent=4)
+
+    def load_state(self):
+        if os.path.exists(self.filename):
+            with open(self.filename, 'r') as f:
+                data = json.load(f)
+                self.market_pool = data.get("market_pool", {'Girl': 100.0, 'Boy': 100.0})
+                self.positions = data.get("positions", {})
+                self.bet_history = data.get("bet_history", [])
+
+    def get_price(self, side):
+        total_shares = self.market_pool['Girl'] + self.market_pool['Boy']
+        return self.market_pool[side] / total_shares
+
+    def place_bet(self, trader, side, dollars):
+        if trader not in self.positions:
+            self.positions[trader] = {'Girl_Shares': 0.0, 'Boy_Shares': 0.0, 'Total_Spent': 0.0}
+
+        current_price = self.get_price(side)
+        shares_bought = dollars / current_price
+
+        self.market_pool[side] += shares_bought
+        self.positions[trader][f'{side}_Shares'] += shares_bought
+        self.positions[trader]['Total_Spent'] += dollars
+
+        # Record the exact transaction for the receipt tape
+        timestamp = datetime.now().strftime("%Y-%m-%d %H:%M")
+        self.bet_history.append({
+            "time": timestamp,
+            "trader": trader,
+            "side": side,
+            "dollars": dollars,
+            "price_cents": current_price * 100,
+            "shares": shares_bought
+        })
+
+        self.save_state()
+        
+        print(f"\n✅ {trader} bet ${dollars:.2f} on {side}!")
+        print(f"📈 NEW LIVE LINES -> Girl: {self.get_price('Girl') * 100:.1f}¢ | Boy: {self.get_price('Boy') * 100:.1f}¢")
+
+    def show_ledger(self):
+        print("\n" + "="*50)
+        print("=== 👶 BABY MORGAN LIVE LEDGER ===")
+        print("="*50)
+        
+        # Show Total Balances
+        print("\n--- CURRENT BALANCES (Who Owes What) ---")
+        for trader, data in self.positions.items():
+            print(f"{trader.ljust(10)} | Girl Shares: {data['Girl_Shares']:>6.1f} | Boy Shares: {data['Boy_Shares']:>6.1f} | Owed to Pot: ${data['Total_Spent']:.2f}")
+        
+        # Show the Running Log of Bets
+        print("\n--- BET HISTORY (The Receipts) ---")
+        if not self.bet_history:
+            print("No bets placed yet.")
+        else:
+            for bet in self.bet_history:
+                print(f"[{bet['time']}] {bet['trader']} bet ${bet['dollars']:.2f} on {bet['side']} at {bet['price_cents']:.1f}¢ (Got {bet['shares']:.1f} shares)")
+        print("="*50 + "\n")
+
+    def run_live_terminal(self):
+        while True:
+            girl_line = self.get_price('Girl') * 100
+            boy_line = self.get_price('Boy') * 100
+            
+            print(f"\n🔴 LIVE LINES: [Girl: {girl_line:.1f}¢]  |  [Boy: {boy_line:.1f}¢]")
+            print("1. Enter a new bet")
+            print("2. View Ledger & Bet History")
+            print("3. Exit")
+            
+            choice = input("Select an option (1-3): ")
+            
+            if choice == '1':
+                trader = input("Who is making the bet?: ")
+                side = input("Girl or Boy?: ").capitalize()
+                
+                if side not in ['Girl', 'Boy']:
+                    print("❌ Invalid input. Must be 'Girl' or 'Boy'.")
+                    continue
+                    
+                try:
+                    dollars = float(input(f"How much money is {trader} betting on {side}?: $"))
+                    self.place_bet(trader, side, dollars)
+                except ValueError:
+                    print("❌ Please enter a valid number.")
+                    
+            elif choice == '2':
+                self.show_ledger()
+            elif choice == '3':
+                print("Saving and exiting...")
+                break
+
+if __name__ == "__main__":
+    market = LiveBabyMarket()
+    market.run_live_terminal()
